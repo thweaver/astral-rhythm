@@ -1,0 +1,19 @@
+{
+  "name": "pirate-radio",
+  "version": "1.0.0",
+  "description": "Personal BBC Radio 1 dance shows streaming app",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-fetch": "^2.7.0",
+    "dotenv": "^16.4.5",
+    "node-cache": "^5.1.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

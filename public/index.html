@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Astral Rhythm</title>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="/icons/favicon-16.png" type="image/png" sizes="16x16">
+
+  <!-- PWA / iPhone home screen / CarPlay -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Astral Rhythm">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+
+  <!-- Description / Open Graph -->
+  <meta name="description" content="Stream BBC Radio 1 dance shows — Essential Mix, Pete Tong, Danny Howard and Radio 1 Dance. Full episode archive with tracklists.">
+  <meta property="og:title" content="Astral Rhythm">
+  <meta property="og:description" content="Stream BBC Radio 1 dance shows — Essential Mix, Pete Tong, Danny Howard and Radio 1 Dance.">
+  <meta property="og:image" content="/icons/icon-512.png">
+  <meta property="og:type" content="website">
+
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <button class="back-btn" id="backBtn" aria-label="Go back" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <h1 class="app-title" id="pageTitle">
+        <span class="title-icon">📡</span> Astral Rhythm
+      </h1>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Shows grid -->
+    <section id="showsView" class="view active">
+      <div class="shows-grid" id="showsGrid">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <!-- Episodes list -->
+    <section id="episodesView" class="view">
+      <div class="show-hero" id="showHero"></div>
+      <div class="episodes-list" id="episodesList"></div>
+    </section>
+
+    <!-- Episode detail -->
+    <section id="episodeView" class="view">
+      <div id="episodeDetail"></div>
+    </section>
+  </main>
+
+  <!-- Persistent audio player -->
+  <div class="player-bar" id="playerBar" style="display:none">
+    <div class="player-progress-wrap">
+      <div class="player-progress-bg">
+        <div class="player-progress-fill" id="progressFill"></div>
+      </div>
+      <input type="range" class="player-seek" id="seekBar" min="0" max="100" value="0" aria-label="Seek">
+    </div>
+    <div class="player-main">
+      <div class="player-art" id="playerArt">
+        <img src="" alt="" id="playerArtImg">
+      </div>
+      <div class="player-info">
+        <div class="player-track" id="playerTrack">Loading...</div>
+        <div class="player-show" id="playerShow"></div>
+      </div>
+      <div class="player-right">
+        <div class="player-controls">
+          <button class="ctrl-btn skip-back" id="skipBackBtn" aria-label="Skip back 30s">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/><text x="7" y="15" font-size="5" fill="currentColor">30</text></svg>
+          </button>
+          <button class="ctrl-btn play-pause" id="playPauseBtn" aria-label="Play/Pause">
+            <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <button class="ctrl-btn skip-fwd" id="skipFwdBtn" aria-label="Skip forward 30s">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.01 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/><text x="7" y="15" font-size="5" fill="currentColor">30</text></svg>
+          </button>
+        </div>
+        <div class="player-time" id="playerTime"></div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="audioEl" preload="none"></audio>
+
+  <!-- HLS.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+  <script src="/app.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

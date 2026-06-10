@@ -1,0 +1,32 @@
+{
+  "name": "Astral Rhythm",
+  "short_name": "Astral Rhythm",
+  "description": "BBC Radio 1 Dance Shows",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["music", "entertainment"],
+  "shortcuts": [
+    {
+      "name": "Essential Mix",
+      "url": "/",
+      "description": "Open Essential Mix episodes"
+    }
+  ]
+}
