@@ -21,7 +21,7 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100%;
-  padding-top: var(--header-h);
+  padding-top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   padding-bottom: calc(var(--player-h) + var(--safe-bottom) + 8px);
   -webkit-font-smoothing: antialiased;
 }
@@ -30,19 +30,19 @@ body {
 .app-header {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--header-h);
+  height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   background: rgba(10,10,10,0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
   z-index: 100;
-  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .header-inner {
   display: flex;
   align-items: center;
-  height: 100%;
+  height: var(--header-h);
+  margin-top: env(safe-area-inset-top, 0px);
   padding: 0 16px;
   gap: 12px;
 }
@@ -269,12 +269,6 @@ main { max-width: 800px; margin: 0 auto; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.episode-card-arrow {
-  color: var(--text-muted);
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-}
 
 .episode-play-btn {
   background: none;
@@ -341,9 +335,19 @@ main { max-width: 800px; margin: 0 auto; }
 .player-main {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   padding: 10px 16px;
   height: calc(var(--player-h) - 3px);
+  gap: 8px;
+}
+
+.player-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .player-art {
@@ -356,16 +360,8 @@ main { max-width: 800px; margin: 0 auto; }
 .player-art img { width: 100%; height: 100%; object-fit: cover; }
 
 .player-info {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
-}
-
-.player-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
 }
 .player-track {
   font-size: 0.85rem;
@@ -414,9 +410,8 @@ main { max-width: 800px; margin: 0 auto; }
   font-size: 0.7rem;
   color: var(--text-muted);
   white-space: nowrap;
-  width: 108px;
+  flex: 1;
   text-align: right;
-  flex-shrink: 0;
 }
 
 /* Now playing marquee for live */

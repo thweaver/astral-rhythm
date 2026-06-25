@@ -5,14 +5,15 @@ const cache = new NodeCache({ stdTTL: parseInt(process.env.CACHE_TTL) || 900 });
 
 // Worldwide BBC Radio 1 HLS live streams — no UK proxy needed
 const LIVE_STREAMS = {
-  bbc_radio_one: 'https://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one/bbc_radio_one.isml/bbc_radio_one-audio=96000.norewind.m3u8',
-  bbc_radio_one_dance: 'https://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one_dance/bbc_radio_one_dance.isml/bbc_radio_one_dance-audio=96000.norewind.m3u8',
-  bbc_radio_one_relax: 'https://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one_relax/bbc_radio_one_relax.isml/bbc_radio_one_relax-audio=96000.norewind.m3u8',
+  bbc_radio_one: 'https://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one/bbc_radio_one.isml/bbc_radio_one-audio=320000.norewind.m3u8',
+  bbc_radio_one_dance: 'https://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one_dance/bbc_radio_one_dance.isml/bbc_radio_one_dance-audio=320000.norewind.m3u8',
+  bbc_radio_one_relax: 'https://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one_relax/bbc_radio_one_relax.isml/bbc_radio_one_relax-audio=320000.norewind.m3u8',
 };
 
 // BBC Sounds API base — works from US, no auth required
 const RMS_BASE = 'https://rms.api.bbc.co.uk/v2';
-const MEDIASELECTOR = 'https://open.live.bbc.co.uk/mediaselector/6/select/version/2.0/format/json/mediaset/mobile-phone-main/vpid';
+const MEDIASELECTOR_BASE = 'https://open.live.bbc.co.uk/mediaselector/6/select/version/2.0/format/json/mediaset';
+const MEDIASETS = ['pc', 'mobile-phone-main'];
 
 // Show catalogue — PIDs verified via BBC Sounds experience/search API
 const SHOWS = [
@@ -128,17 +129,27 @@ async function getEpisodes(showId) {
 }
 
 async function fetchBbcSoundsEpisodes(show) {
-  const url = `${RMS_BASE}/programmes/playable?container=${show.id}&sort=-available_from_date&type=episode&page_size=8`;
-  const res = await directFetch(url, { headers: RMS_HEADERS });
-  if (!res.ok) throw new Error(`BBC Sounds API ${res.status}`);
-  const data = await res.json();
+  const PAGE_SIZE = 30; // API maximum
+  let offset = 0;
+  let allEpisodes = [];
 
-  return (data.data || []).map(ep => {
-    // Image: replace {recipe} template with a size
+  while (true) {
+    const url = `${RMS_BASE}/programmes/playable?container=${show.id}&sort=-available_from_date&type=episode&page_size=${PAGE_SIZE}&offset=${offset}`;
+    const res = await directFetch(url, { headers: RMS_HEADERS });
+    if (!res.ok) throw new Error(`BBC Sounds API ${res.status}`);
+    const data = await res.json();
+
+    const page = data.data || [];
+    allEpisodes = allEpisodes.concat(page);
+
+    // Stop when we've received everything the API has
+    if (allEpisodes.length >= (data.total || 0) || page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return allEpisodes.map(ep => {
     const rawImage = ep.image_url || '';
     const image = rawImage.replace('{recipe}', '480x270') || show.image;
-
-    // Title: combine primary + secondary (e.g. "Essential Mix - DJ Name")
     const title = ep.titles
       ? [ep.titles.primary, ep.titles.secondary].filter(Boolean).join(' — ')
       : ep.id;
@@ -157,34 +168,41 @@ async function fetchBbcSoundsEpisodes(show) {
 }
 
 // Get worldwide HLS stream URL for an on-demand episode via MediaSelector.
-// Returns the direct Akamai ww URL — no UK proxy needed.
+// Tries mediasets in order (highest quality first) and falls back on failure.
 async function getEpisodeStreamUrl(episodeId) {
   const cacheKey = `stream:${episodeId}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const url = `${MEDIASELECTOR}/${episodeId}`;
-  const res = await directFetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-    },
-  });
-  if (!res.ok) throw new Error(`MediaSelector ${res.status}`);
-  const data = await res.json();
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+  };
 
-  if (data.result) throw new Error(`MediaSelector: ${data.result}`);
+  for (const mediaset of MEDIASETS) {
+    try {
+      const url = `${MEDIASELECTOR_BASE}/${mediaset}/vpid/${episodeId}`;
+      const res = await directFetch(url, { headers });
+      if (!res.ok) { console.warn(`MediaSelector ${mediaset} → HTTP ${res.status}`); continue; }
 
-  const media = (data.media || []).find(m => m.kind === 'audio');
-  if (!media) throw new Error('No audio media');
+      const data = await res.json();
+      if (data.result) { console.warn(`MediaSelector ${mediaset} → ${data.result}`); continue; }
 
-  // Prefer HTTPS HLS
-  const conn = (media.connection || []).find(c => c.transferFormat === 'hls' && c.protocol === 'https')
-    || (media.connection || []).find(c => c.transferFormat === 'hls');
-  if (!conn) throw new Error('No HLS connection');
+      const media = (data.media || []).find(m => m.kind === 'audio');
+      if (!media) { console.warn(`MediaSelector ${mediaset} → no audio media`); continue; }
 
-  // Cache for 1 hour (stream URLs include time-limited tokens)
-  cache.set(cacheKey, conn.href, 3500);
-  return conn.href;
+      const conn = (media.connection || []).find(c => c.transferFormat === 'hls' && c.protocol === 'https')
+        || (media.connection || []).find(c => c.transferFormat === 'hls');
+      if (!conn) { console.warn(`MediaSelector ${mediaset} → no HLS connection`); continue; }
+
+      console.log(`Stream resolved via mediaset: ${mediaset}`);
+      cache.set(cacheKey, conn.href, 3500);
+      return conn.href;
+    } catch (err) {
+      console.warn(`MediaSelector ${mediaset} failed:`, err.message);
+    }
+  }
+
+  throw new Error('No stream available from any mediaset');
 }
 
 // Now-playing metadata for a live service — uses RMS broadcasts API (no auth, no geo-block)

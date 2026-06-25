@@ -14,6 +14,8 @@ const state = {
     title: '',
     show: '',
     image: '',
+    tracklist: [],
+    activeTrackIndex: -1,
   },
 };
 
@@ -57,9 +59,20 @@ function initHls(url, onReady) {
   }
 }
 
+// Returns index of the track currently playing, based on audio position
+function getActiveTrackIdx() {
+  const tracklist = state.player.tracklist;
+  if (!tracklist || !tracklist.length) return -1;
+  let idx = -1;
+  for (let i = 0; i < tracklist.length; i++) {
+    if (tracklist[i].offset != null && audioEl.currentTime >= tracklist[i].offset) idx = i;
+  }
+  return idx;
+}
+
 // ── Player controls ────────────────────────────────────────────────────────
 function playStream(url, meta, isLive = false, seekTo = null) {
-  state.player = { ...state.player, ...meta, isLive };
+  state.player = { ...state.player, ...meta, isLive, tracklist: meta.tracklist || [], activeTrackIndex: -1 };
   showPlayerBar(meta);
   updateMediaSession(meta);
 
@@ -93,11 +106,20 @@ playPauseBtn.addEventListener('click', () => {
 });
 
 skipBackBtn.addEventListener('click', () => {
-  if (!state.player.isLive) audioEl.currentTime = Math.max(0, audioEl.currentTime - 30);
+  if (state.player.isLive) return;
+  const tracklist = state.player.tracklist;
+  if (!tracklist || !tracklist.length) return;
+  const idx = getActiveTrackIdx();
+  if (idx > 0) audioEl.currentTime = tracklist[idx - 1].offset;
+  else if (idx === 0) audioEl.currentTime = tracklist[0].offset || 0;
 });
 
 skipFwdBtn.addEventListener('click', () => {
-  if (!state.player.isLive) audioEl.currentTime = Math.min(audioEl.duration || Infinity, audioEl.currentTime + 30);
+  if (state.player.isLive) return;
+  const tracklist = state.player.tracklist;
+  if (!tracklist || !tracklist.length) return;
+  const idx = getActiveTrackIdx();
+  if (idx < tracklist.length - 1) audioEl.currentTime = tracklist[idx + 1].offset;
 });
 
 seekBar.addEventListener('input', () => {
@@ -166,7 +188,31 @@ function updateEpPlayBtn() {
 }
 
 // Highlight the currently playing track in tracklist based on audio position
+// Also updates MediaSession artist/album with the current song when it changes
 function highlightActiveTrack(currentTime) {
+  // Update MediaSession with current track for on-demand episodes
+  const tracklist = state.player.tracklist;
+  if (!state.player.isLive && tracklist && tracklist.length) {
+    let activeIdx = -1;
+    for (let i = 0; i < tracklist.length; i++) {
+      if (tracklist[i].offset != null && currentTime >= tracklist[i].offset) activeIdx = i;
+    }
+    if (activeIdx !== state.player.activeTrackIndex) {
+      state.player.activeTrackIndex = activeIdx;
+      const track = activeIdx >= 0 ? tracklist[activeIdx] : null;
+      // Update player bar second line with current song
+      playerShow.textContent = track
+        ? [track.title, track.artist].filter(Boolean).join(' — ')
+        : state.player.show;
+      updateMediaSession({
+        title: state.player.title,
+        artist: track ? (track.artist || state.player.show) : state.player.show,
+        album: track ? (track.title || '') : '',
+        image: state.player.image,
+      });
+    }
+  }
+
   const rows = document.querySelectorAll('.track-row[data-offset]');
   if (!rows.length) return;
   let activeRow = null;
@@ -183,13 +229,13 @@ function updateMediaSession(meta) {
   navigator.mediaSession.metadata = new MediaMetadata({
     title: meta.title || 'Astral Rhythm',
     artist: meta.artist || meta.show || 'BBC Radio 1',
-    album: 'Astral Rhythm',
+    album: meta.album !== undefined ? meta.album : 'Astral Rhythm',
     artwork: meta.image ? [{ src: meta.image, sizes: '512x512', type: 'image/jpeg' }] : [],
   });
   navigator.mediaSession.setActionHandler('play', () => audioEl.play());
   navigator.mediaSession.setActionHandler('pause', () => audioEl.pause());
-  navigator.mediaSession.setActionHandler('seekbackward', () => skipBackBtn.click());
-  navigator.mediaSession.setActionHandler('seekforward', () => skipFwdBtn.click());
+  navigator.mediaSession.setActionHandler('previoustrack', () => skipBackBtn.click());
+  navigator.mediaSession.setActionHandler('nexttrack', () => skipFwdBtn.click());
 }
 
 // ── Now-playing poll ───────────────────────────────────────────────────────
@@ -225,45 +271,95 @@ function showView(name) {
 }
 
 function navigateTo(view, opts = {}) {
+  const { noHistory = false, ...rest } = opts;
   state.view = view;
+
   if (view === 'shows') {
+    if (!noHistory) history.pushState({ view: 'shows' }, '', '/');
+    document.title = 'Astral Rhythm';
     showView('shows');
-    backBtn.style.display = "none";
+    backBtn.style.display = 'none';
     pageTitle.innerHTML = '<span class="title-icon">📡</span> Astral Rhythm<span style="font-size:0.65rem;color:var(--text-muted);font-weight:400;margin-left:8px">BBC Pirate Radio</span>';
     state.currentShow = null;
     state.currentEpisode = null;
     stopNowPlayingPoll();
   } else if (view === 'episodes') {
-    const { show } = opts;
+    const { show } = rest;
     state.currentShow = show;
+    if (!noHistory) history.pushState({ view: 'episodes', showId: show.id }, '', `/show/${show.id}`);
+    document.title = `${show.title} — Astral Rhythm`;
     showView('episodes');
-    backBtn.style.display = "flex";
+    backBtn.style.display = 'flex';
     pageTitle.textContent = show.title;
     renderShowHero(show);
     loadEpisodes(show);
   } else if (view === 'episode') {
-    const { show, episodeId } = opts;
+    const { show, episodeId } = rest;
+    if (!noHistory) history.pushState({ view: 'episode', showId: show.id, episodeId }, '', `/show/${show.id}/episode/${episodeId}`);
+    document.title = `${show.title} — Astral Rhythm`;
     showView('episode');
-    backBtn.style.display = "flex";
+    backBtn.style.display = 'flex';
     pageTitle.textContent = show.title;
     loadEpisodeDetail(show, episodeId);
   }
 }
 
 function navigateBack() {
-  if (state.view === 'episode') {
-    // Back to episodes list — no re-fetch
-    state.view = 'episodes';
-    showView('episodes');
-    backBtn.style.display = "flex";
-    pageTitle.textContent = state.currentShow.title;
-  } else if (state.view === 'episodes') {
-    navigateTo('shows');
-  }
-  // Already on shows — do nothing
+  history.back();
 }
 
 backBtn.addEventListener('click', navigateBack);
+
+// Restore view when browser back/forward is used
+window.addEventListener('popstate', async e => {
+  const s = e.state;
+  if (!s || s.view === 'shows') {
+    navigateTo('shows', { noHistory: true });
+    return;
+  }
+  const show = await resolveShow(s.showId);
+  if (!show) { navigateTo('shows', { noHistory: true }); return; }
+
+  if (s.view === 'episodes') {
+    navigateTo('episodes', { show, noHistory: true });
+  } else if (s.view === 'episode') {
+    navigateTo('episode', { show, episodeId: s.episodeId, noHistory: true });
+  }
+});
+
+async function resolveShow(showId) {
+  if (!state.shows.length) await loadShows();
+  return state.shows.find(s => s.id === showId) || null;
+}
+
+// Parse the URL on first load so deep links and reloads work
+async function handleInitialRoute() {
+  const path = window.location.pathname;
+  const epMatch  = path.match(/^\/show\/([^/]+)\/episode\/([^/]+)$/);
+  const shMatch  = path.match(/^\/show\/([^/]+)$/);
+
+  if (epMatch || shMatch) {
+    const showId    = (epMatch || shMatch)[1];
+    const episodeId = epMatch ? epMatch[2] : null;
+    const show      = await resolveShow(showId);
+
+    if (show) {
+      // Build a synthetic history stack so back works naturally
+      history.replaceState({ view: 'shows' }, '', '/');
+      history.pushState({ view: 'episodes', showId }, '', `/show/${showId}`);
+      if (episodeId) {
+        history.pushState({ view: 'episode', showId, episodeId }, '', `/show/${showId}/episode/${episodeId}`);
+        navigateTo('episode', { show, episodeId, noHistory: true });
+      } else {
+        navigateTo('episodes', { show, noHistory: true });
+      }
+      return;
+    }
+  }
+
+  // Default: root — stamp initial history state
+  history.replaceState({ view: 'shows' }, '', '/');
+}
 
 // ── Shows ──────────────────────────────────────────────────────────────────
 async function loadShows() {
@@ -275,6 +371,7 @@ async function loadShows() {
   } catch (err) {
     $('showsGrid').innerHTML = `<div class="empty-state">⚠️ Could not load shows<p>${err.message}</p></div>`;
   }
+  return state.shows;
 }
 
 function renderShows(shows) {
@@ -331,13 +428,8 @@ function renderShowHero(show) {
       <div class="show-hero-title">${show.title}</div>
       <div class="show-hero-host">${show.host}</div>
       <div class="show-hero-desc">${show.description}</div>
-      ${!show.liveOnly ? `
-        <button class="hero-live-btn" style="background:${show.colour}">
-          <span class="live-dot"></span> Listen Live
-        </button>` : ''}
     </div>
   `;
-  $('showHero').querySelector('.hero-live-btn')?.addEventListener('click', () => playLive(show));
 }
 
 async function loadEpisodes(show) {
@@ -369,9 +461,6 @@ function renderEpisodes(episodes, show) {
           ${ep.duration ? `<span>${formatTime(ep.duration)}</span>` : ''}
         </div>
         <div class="episode-desc">${ep.description || ''}</div>
-        <div class="episode-card-arrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
       </div>
     </div>
   `).join('');
@@ -400,6 +489,8 @@ async function loadEpisodeDetail(show, episodeId) {
     if (!res.ok) throw new Error('Could not load episode');
     const data = await res.json();
     state.currentEpisode = data.episode;
+    document.title = `${data.episode.title} — Astral Rhythm`;
+    history.replaceState(history.state, '', window.location.pathname);
     renderEpisodeDetail(data.show, data.episode);
   } catch (err) {
     container.innerHTML = `<div class="empty-state">⚠️ ${err.message}</div>`;
@@ -500,7 +591,7 @@ async function handleEpPlay(show, ep) {
     if (!streamUrl) throw new Error('No stream URL');
 
     const savedTime = getSavedProgress(ep.id);
-    playStream(streamUrl, { title: ep.title, show: show.title, image: ep.image || show.image }, false, savedTime);
+    playStream(streamUrl, { title: ep.title, show: show.title, image: ep.image || show.image, tracklist: ep.tracklist || [] }, false, savedTime);
   } catch (err) {
     state.player.currentEpisodeId = null;
     if (btn) { btn.disabled = false; btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Play Mix`; }
@@ -568,4 +659,4 @@ function escHtml(str) {
 
 // ── Init ───────────────────────────────────────────────────────────────────
 state.view = 'shows';
-loadShows();
+loadShows().then(handleInitialRoute);
