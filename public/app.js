@@ -205,9 +205,9 @@ function highlightActiveTrack(currentTime) {
         ? [track.title, track.artist].filter(Boolean).join(' — ')
         : state.player.show;
       updateMediaSession({
-        title: state.player.title,
+        title: track ? (track.title || state.player.title) : state.player.title,
         artist: track ? (track.artist || state.player.show) : state.player.show,
-        album: track ? (track.title || '') : '',
+        album: state.player.title,
         image: state.player.image,
       });
     }
@@ -242,7 +242,7 @@ function updateMediaSession(meta) {
 function startNowPlayingPoll(service = 'bbc_radio_one') {
   stopNowPlayingPoll();
   fetchNowPlaying(service);
-  nowPlayingTimer = setInterval(() => fetchNowPlaying(service), 30000);
+  nowPlayingTimer = setInterval(() => fetchNowPlaying(service), 15000);
 }
 
 function stopNowPlayingPoll() {

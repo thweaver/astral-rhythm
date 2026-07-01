@@ -217,7 +217,7 @@ async function getNowPlaying(service = 'bbc_radio_one') {
     if (!res.ok) throw new Error(`Broadcasts API ${res.status}`);
     const data = await res.json();
     const result = parseNowPlaying(data);
-    cache.set(cacheKey, result, 30);
+    cache.set(cacheKey, result, 12);
     return result;
   } catch (err) {
     console.error('Now-playing failed:', err.message);
